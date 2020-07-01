@@ -1,0 +1,97 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: namespace-admission-config
+  namespace: namespace-admission
+data:
+  namespace-admission.properties: |
+    external_api_url=https://localhost:8080
+    external_api_timeout=10
+    requester_key=mycompany.com/requester
+    listen_addr=0.0.0.0:8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: namespace-admission
+  namespace: namespace-admission
+  labels:
+    name: namespace-admission
+spec:
+  ports:
+  - name: webhook
+    port: 443
+    targetPort: 8080
+  selector:
+    name: namespace-admission
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: namespace-admission
+  namespace: namespace-admission
+  labels:
+    name: namespace-admission
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: namespace-admission
+  template:
+    metadata:
+      name: namespace-admission 
+      labels:
+        name: namespace-admission
+    spec:
+      containers:
+        - name: webhook
+#          image: image-registry.openshift-image-registry.svc:5000/openshift/namespace-admission:latest
+          image: docker-registry.default.svc:5000/openshift/namespace-admission:latest
+#          image: localhost:5000/namespace-admission:latest
+          imagePullPolicy: Always
+          env:
+            - name: DEBUG
+              value: "true"
+          resources:
+            limits:
+              memory: 50Mi
+              cpu: 300m
+            requests:
+              memory: 50Mi
+              cpu: 300m
+          volumeMounts:
+            - name: webhook-certs
+              mountPath: /etc/webhook/certs
+              readOnly: true
+            - name: namespace-admission-config
+              mountPath: /etc/webhook/namespace-admission-config
+              readOnly: true
+          securityContext:
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: webhook-certs
+          secret:
+            secretName: namespace-admission-certs
+        - name: namespace-admission-config
+          configMap:
+            name: namespace-admission-config
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: namespace-admission
+webhooks:
+  - name: namespace-admission.cust.local
+    clientConfig:
+      service:
+        name: namespace-admission
+        namespace: namespace-admission
+        path: "/"
+      caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUM2akNDQWRLZ0F3SUJBZ0lCQVRBTkJna3Foa2lHOXcwQkFRc0ZBREFtTVNRd0lnWURWUVFEREJ0dmNHVnUKYzJocFpuUXRjMmxuYm1WeVFERTFPREEyTlRRNE5UZ3dIaGNOTWpBd01qQXlNVFEwTnpNM1doY05NalV3TVRNeApNVFEwTnpNNFdqQW1NU1F3SWdZRFZRUUREQnR2Y0dWdWMyaHBablF0YzJsbmJtVnlRREUxT0RBMk5UUTROVGd3CmdnRWlNQTBHQ1NxR1NJYjNEUUVCQVFVQUE0SUJEd0F3Z2dFS0FvSUJBUUN1Q3F1V29QYnRCYUtNNHhqZi81RWUKSFMzVDJrNWJaTnNaT2FxRTVITHN1M1doT1A4OUJEWWZoeDdDTmtKNXdQaXRhM1o2YTYzQXB0VVh4cFFxZk81RQpTeDl4NFJpRHRndDR2aUhKeXphN3c1YzZaSUs3UHlOdGJjbTdab1NZZEtkdkl5ZUdibFBZZUo4ZDlHdWVXVDI5ClNDT0hIbGVXL1R1Y0M2Y3Q5VFFSdkxxVjQ5QVhxemtoSGZ2NGtBcGF4cnVlVStmQTNDbzlqR0tES3JWWTRkd0wKMDVWTUFobVBsZUVmbGVtMXZwZ1g5alFTR0xJb0t2dGgxcEtaTjRqTUZSY2lvQVdpaDJGWmFKYXE2Y1JTYlhHUApPTlRacTBWWnpNaE1GZXJZUndsRDd5ZHJZWHRveHd2MDFlVlUrLy8yM3pWMFJpMHI2MjNwcWtncTlFbU9YcDVECkFnTUJBQUdqSXpBaE1BNEdBMVVkRHdFQi93UUVBd0lDcERBUEJnTlZIUk1CQWY4RUJUQURBUUgvTUEwR0NTcUcKU0liM0RRRUJDd1VBQTRJQkFRQjVpd25FV2FraVQwSnVIb1czTG1IR2E4TlM1bSt1MG9ZRXR6WHRFcGZiajJxbwpieStZYmJtOEVjN1hRZCtleUcralkzS1hqQ0VJMHB5VTk4QXUxWXFYM000aXczWlYwenA4b2pSbUF2M2xWTTJ0CmhyY0VqOWU0VXJpVVRpQmV6K3Y0MnkyK2R6U3RNTHJVZlEwdVdqQk1lcTBRWGNkZUMrd0M0U3BEZFV3RU15ajAKV085UUhwc3ZDWDZBak80YWJCdGUyaURhcEdsRk8yYis4QW1rVG9yZHV3MEs4V1pYblFEbE5XUzdNZVlkczVaYwo4UVhROXdHZ1VyUWpVNmtPeWNWREc1NGdabkd5b045dzV5OVQwSG9JMSt5dVdleWlyUk5aaTV2dkowOGpkNVJZCkVVWW1iRWpxU1hHb3FVdlA4NmloZXdETXBkUkhJZTJpd0FzeWVadzMKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+    rules:
+      - operations: ["CREATE"]
+        apiGroups: ["", "project.openshift.io"]
+        apiVersions: ["v1"]
+        resources: ["namespaces","projects"]
+    failurePolicy: Ignore
