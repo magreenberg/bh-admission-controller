@@ -2,11 +2,14 @@ package webhook
 
 import (
 	"encoding/json"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/sirupsen/logrus"
 	"k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"strings"
+	"time"
 )
 
 // NamespaceAdmission request
@@ -27,6 +30,39 @@ type externalValues struct {
 	Name string
 	User string
 }
+
+const (
+	prefix = "namespaceadmission"
+)
+
+var (
+	requestsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: prefix + "_requests_total",
+		Help: "The total number of processed requests",
+	})
+	requestsHandled = promauto.NewCounter(prometheus.CounterOpts{
+		Name: prefix + "_requests_handled",
+		Help: "The total number of processed requests",
+	})
+	requestsError = promauto.NewCounter(prometheus.CounterOpts{
+		Name: prefix + "_requests_error",
+		Help: "The total number of requests in error",
+	})
+	requestsDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name: prefix + "_requests_duration",
+		Help: "The durations of requests",
+		Buckets: prometheus.LinearBuckets(1, 3, 5),
+	})
+	externalAPIError = promauto.NewCounter(prometheus.CounterOpts{
+		Name: prefix + "_external_api_error",
+		Help: "The total number of external API invocations in error",
+	})
+	externalAPIDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name: prefix + "_external_api_duration",
+		Help: "The durations of requests",
+		Buckets: prometheus.LinearBuckets(1, 3, 5),
+	})
+)
 
 func updateAnnotation(target map[string]string, added map[string]string) (patch []patchOperation) {
 	for key, value := range added {
@@ -74,6 +110,8 @@ func (namespaceAdmission *NamespaceAdmission) HandleAdmission(review *v1beta1.Ad
 		requestKind := reqKind.Kind
 		if strings.EqualFold("Namespace", requestKind) ||
 			strings.EqualFold("Project", requestKind) {
+			requestsTotal.Inc()
+			startRequestTime := time.Now()
 
 			var ns corev1.Namespace
 			if err := json.Unmarshal(request.Object.Raw, &ns); err != nil {
@@ -84,6 +122,7 @@ func (namespaceAdmission *NamespaceAdmission) HandleAdmission(review *v1beta1.Ad
 						Message: "Failed!",
 					},
 				}
+				requestsError.Inc()
 				return nil
 			}
 			//logrus.Debugln("Unmarshalled Raw:", ns)
@@ -108,6 +147,7 @@ func (namespaceAdmission *NamespaceAdmission) HandleAdmission(review *v1beta1.Ad
 			}
 
 			if !foundRequester {
+				requestsHandled.Inc()
 				logrus.Infoln("Creating annotation: " +
 					namespaceAdmission.RequesterKey +
 					"=" +
@@ -124,6 +164,7 @@ func (namespaceAdmission *NamespaceAdmission) HandleAdmission(review *v1beta1.Ad
 							Message: "createPatch failed",
 						},
 					}
+					requestsError.Inc()
 					return nil
 				}
 
@@ -147,13 +188,20 @@ func (namespaceAdmission *NamespaceAdmission) HandleAdmission(review *v1beta1.Ad
 					if err != nil {
 						logrus.Errorln("Can't marshal externalValues", err)
 					} else {
-						// ignore error (for now)
-						_ = invokeexternal(namespaceAdmission.ExternalAPIURL, namespaceAdmission.ExternalAPITimeout, string(jsonStr))
-						// if err != nil {
-						// 	logrus.Errorln("Invoke external failed:", err)
-						// }
+						startExternalAPITime := time.Now()
+						err = invokeexternal(namespaceAdmission.ExternalAPIURL, namespaceAdmission.ExternalAPITimeout, string(jsonStr))
+						if err != nil {
+							// logrus.Errorln("Invoke external failed:", err)
+							externalAPIError.Inc()
+						}
+						elapsedExternalAPI := time.Since(startExternalAPITime)
+						logrus.Debugln("externalAPI elapsed time=", elapsedExternalAPI.Seconds())
+						externalAPIDuration.Observe(float64(elapsedExternalAPI.Seconds()))
 					}
 				}
+				elapsed := time.Since(startRequestTime)
+				logrus.Debugln("request elapsed time=", elapsed.Seconds())
+				requestsDuration.Observe(float64(elapsed.Seconds()))
 				return nil
 			}
 		}
