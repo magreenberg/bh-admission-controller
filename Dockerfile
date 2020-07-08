@@ -4,13 +4,20 @@ RUN microdnf -y install go ca-certificates
 
 WORKDIR /namespace-admission-controller
 
+# The default build uses the "vendor" directory.
+# Update the "vendor" directory with: go mod vendor
+# Bypass the "vendor" directory during the build with: -build-arg VENDOR_CACHE=false
+ARG VENDOR_CACHE=true
 # load static dependencies to speed build
 COPY go.mod go.sum ./
-RUN go mod download
+# preload go modules as cache
+RUN set -x;[[ "${VENDOR_CACHE}" != "true" ]] && go mod download || true
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -ldflags="-w -s" -o /go/bin/namespace-admission-controller
+RUN set -x;[[ "${VENDOR_CACHE}" != "true" ]] && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -ldflags="-w -s" -o /go/bin/namespace-admission-controller || \
+    GOFLAGS=-mod=vendor CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -ldflags="-w -s" -o /go/bin/namespace-admission-controller
 
 # Runtime image
 FROM scratch AS base

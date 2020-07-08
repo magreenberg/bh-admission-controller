@@ -2,8 +2,8 @@
 
 Mutating Admission Controller Webhook
 
-* adds annotation to project/namespace
-* invoke external API with requester
+* Adds annotation to project/namespace
+* Invokes external API with the username of the requester
 
 Code based on https://github.com/ContainerSolutions/go-validation-admission-controller.git
 
@@ -12,7 +12,7 @@ Code based on https://github.com/ContainerSolutions/go-validation-admission-cont
 * Go >= 1.11
 * Kubernetes >= 1.11
 * openssl
-* oc
+* oc or kubectl
 
 # Configuration
 
@@ -45,18 +45,61 @@ go test ./...
 
 # Container Build
 
-```
-REPOSITORY="$(oc get route/default-route -n openshift-image-registry -o=jsonpath='{.spec.host}' 2>/dev/null || oc get route/docker-registry -n default -o=jsonpath='{.spec.host}')/openshift"
-docker login -u unused -p $(oc whoami -t) ${REPOSITORY}
-docker build -t ${REPOSITORY}/namespace-admission:latest .
-docker push ${REPOSITORY}/namespace-admission:latest
-```
+Create an environment variable REGISTRY with the URL to your container registry
 
+## Disconnected Go build
+Note that a build image is needed with the Go language installed. Then run:
+```
+    docker build -t ${REGISTRY}/namespace-admission:latest .
+```
+## Push
+Push the image to your registry.
+```
+    docker push ${REGISTRY}/namespace-admission:latest
+```
 # Running
 
+## Image Name
+Before running the deployment, update the "image:" line in the file deploy.yaml to match your ${REGISTRY} above.
+
+## Run Commands
+Run the following commands:
 ```
-oc new-project namespace-admission
-./gen-cert.sh
-./ca-bundle.sh
-oc apply -f deploy.yaml
+    oc new-project namespace-admission
+    ./gen-cert.sh
+    ./ca-bundle.sh
+    oc apply -f deploy.yaml
 ```
+
+## Testing
+First watch for the running pod. For example:
+```
+$ oc get pods
+NAME                                  READY   STATUS    RESTARTS   AGE
+namespace-admission-789846c97-kqm6v   1/1     Running   0          7s
+```
+
+Create a project or namespace. For example:
+```
+$ oc new-project mynewproject
+```
+
+Check for "mycompany.com/requester" the annotation. For example:
+```
+$ oc get project mynewproject -o jsonpath='{ .metadata.annotations }' 
+map[mycompany.com/requester:kube:admin
+openshift.io/display-name: 
+openshift.io/sa.scc.mcs:s0:c25,c0
+openshift.io/sa.scc.supplemental-groups:1000600000/10000
+openshift.io/sa.scc.uid-range:1000600000/10000]
+```
+
+# Tuning
+A ConfigMap is created with the following default values:
+```
+    external_api_url=https://localhost:8080
+    external_api_timeout=10
+    requester_key=mycompany.com/requester
+    listen_addr=0.0.0.0:8080
+```
+The values can be updated in the deploy.yaml file.
