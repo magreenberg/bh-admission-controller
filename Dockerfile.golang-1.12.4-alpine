@@ -1,0 +1,26 @@
+FROM golang:1.12.4-alpine as builder
+
+# The default build uses the "vendor" directory.
+# Update the "vendor" directory with: go mod vendor
+# Bypass the "vendor" directory during the build with: -build-arg VENDOR_CACHE=false
+ARG VENDOR_CACHE=true
+
+WORKDIR /namespace-admission-controller
+
+COPY . .
+
+RUN apk add --repositories-file=/dev/null --no-cache packages/alpine/v3.9/*.apk
+
+# preload go modules as cache
+RUN set -x;[[ "${VENDOR_CACHE}" != "true" ]] && go mod download || true
+
+RUN set -x;[[ "${VENDOR_CACHE}" != "true" ]] && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -ldflags="-w -s" -o /go/bin/namespace-admission-controller || \
+    GOFLAGS=-mod=vendor CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -ldflags="-w -s" -o /go/bin/namespace-admission-controller
+
+
+# Runtime image
+FROM scratch AS base
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /go/bin/namespace-admission-controller /bin/namespace-admission-controller
+ENTRYPOINT ["/bin/namespace-admission-controller"]

@@ -40,22 +40,28 @@ Then run:
 # Testing
 
 ```
-go test ./...
+    $ go test ./...
 ```
 
 # Container Build
 
-Create an environment variable REGISTRY with the URL to your container registry
+## Building the Container Image
 
-## Disconnected Go build
-Note that a build image is needed with the Go language installed. Then run:
+Create an environment variable REGISTRY with the URL to your container registry.
+Build the image using either the Red Hat UBI base image of the golang image.
+
+### Network Connected Go Build Using Red Hat UBI
 ```
-    docker build -t ${REGISTRY}/namespace-admission:latest .
+    $ docker build -t ${REGISTRY}/namespace-admission:latest .
+```
+### Network Disconnected Go Build Using golang:1.12.4-alpine
+```
+    $ docker build -f Dockerfile.golang-1.12.4-alpine -t ${REGISTRY}/namespace-admission:latest .
 ```
 ## Push
 Push the image to your registry.
 ```
-    docker push ${REGISTRY}/namespace-admission:latest
+    $ docker push ${REGISTRY}/namespace-admission:latest
 ```
 # Running
 
@@ -65,33 +71,33 @@ Before running the deployment, update the "image:" line in the file deploy.yaml 
 ## Run Commands
 Run the following commands:
 ```
-    oc new-project namespace-admission
-    ./gen-cert.sh
-    ./ca-bundle.sh
-    oc apply -f deploy.yaml
+    $ oc new-project namespace-admission
+    $ ./gen-cert.sh
+    $ ./ca-bundle.sh
+    $ oc apply -f deploy.yaml
 ```
 
 ## Testing
 First watch for the running pod. For example:
 ```
-$ oc get pods
-NAME                                  READY   STATUS    RESTARTS   AGE
-namespace-admission-789846c97-kqm6v   1/1     Running   0          7s
+    $ oc get pods
+    NAME                                  READY   STATUS    RESTARTS   AGE
+    namespace-admission-789846c97-kqm6v   1/1     Running   0          7s
 ```
 
 Create a project or namespace. For example:
 ```
-$ oc new-project mynewproject
+    $ oc new-project mynewproject
 ```
 
 Check for "mycompany.com/requester" the annotation. For example:
 ```
-$ oc get project mynewproject -o jsonpath='{ .metadata.annotations }' 
-map[mycompany.com/requester:kube:admin
-openshift.io/display-name: 
-openshift.io/sa.scc.mcs:s0:c25,c0
-openshift.io/sa.scc.supplemental-groups:1000600000/10000
-openshift.io/sa.scc.uid-range:1000600000/10000]
+    $ oc get project mynewproject -o jsonpath='{ .metadata.annotations }' 
+    map[mycompany.com/requester:kube:admin
+    openshift.io/display-name: 
+    openshift.io/sa.scc.mcs:s0:c25,c0
+    openshift.io/sa.scc.supplemental-groups:1000600000/10000
+    openshift.io/sa.scc.uid-range:1000600000/10000]
 ```
 
 # Tuning
@@ -103,3 +109,13 @@ A ConfigMap is created with the following default values:
     listen_addr=0.0.0.0:8080
 ```
 The values can be updated in the deploy.yaml file.
+
+# Cleanup
+Run the following commands to delete objects created:
+```
+    $ oc delete deployment namespace-admission -n namespace-admission
+    $ oc delete MutatingWebhookConfiguration/namespace-admission
+    $ oc delete project namespace-admission
+    $ oc delete csr/namespace-admission.namespace-admission
+    $ oc delete project mynewproject
+```
