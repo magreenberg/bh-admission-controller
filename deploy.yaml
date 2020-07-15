@@ -2,10 +2,10 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: namespace-admission-config
-  namespace: namespace-admission
+  name: bh-admission-config
+  namespace: bh-admission
 data:
-  namespace-admission.properties: |
+  bh-admission.properties: |
     external_api_url=https://localhost:8080
     external_api_timeout=10
     requester_key=mycompany.com/requester
@@ -14,41 +14,41 @@ data:
 apiVersion: v1
 kind: Service
 metadata:
-  name: namespace-admission
-  namespace: namespace-admission
+  name: bg-admission
+  namespace: bh-admission
   labels:
-    name: namespace-admission
+    name: bh-admission
 spec:
   ports:
   - name: webhook
     port: 443
     targetPort: 8080
   selector:
-    name: namespace-admission
+    name: bh-admission
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: namespace-admission
-  namespace: namespace-admission
+  name: bh-admission
+  namespace: bh-admission
   labels:
-    name: namespace-admission
+    name: bh-admission
 spec:
   replicas: 1
   selector:
     matchLabels:
-      name: namespace-admission
+      name: bh-admission
   template:
     metadata:
-      name: namespace-admission 
+      name: bh-admission 
       labels:
-        name: namespace-admission
+        name: bh-admission
     spec:
       containers:
         - name: webhook
-          image: image-registry.openshift-image-registry.svc:5000/openshift/namespace-admission:latest
-#          image: docker-registry.default.svc:5000/openshift/namespace-admission:latest
-#          image: localhost:5000/namespace-admission:latest
+          image: image-registry.openshift-image-registry.svc:5000/openshift/bh-admission:latest
+#          image: docker-registry.default.svc:5000/openshift/bh-admission:latest
+#          image: localhost:5000/bh-admission:latest
           imagePullPolicy: Always
           env:
             - name: DEBUG
@@ -64,18 +64,18 @@ spec:
             - name: webhook-certs
               mountPath: /etc/webhook/certs
               readOnly: true
-            - name: namespace-admission-config
-              mountPath: /etc/webhook/namespace-admission-config
+            - name: bh-admission-config
+              mountPath: /etc/webhook/bh-admission-config
               readOnly: true
           securityContext:
             readOnlyRootFilesystem: true
       volumes:
         - name: webhook-certs
           secret:
-            secretName: namespace-admission-certs
-        - name: namespace-admission-config
+            secretName: bh-admission-certs
+        - name: bh-admission-config
           configMap:
-            name: namespace-admission-config
+            name: bh-admission-config
 ---
 apiVersion: admissionregistration.k8s.io/v1beta1
 kind: MutatingWebhookConfiguration
@@ -85,9 +85,9 @@ webhooks:
   - name: namespace-admission.cust.local
     clientConfig:
       service:
-        name: namespace-admission
-        namespace: namespace-admission
-        path: "/"
+        name: bh-admission
+        namespace: bh-admission
+        path: "/namespace-admission"
       caBundle: ${CA_BUNDLE}
     rules:
       - operations: ["CREATE"]
@@ -95,3 +95,23 @@ webhooks:
         apiVersions: ["v1"]
         resources: ["namespaces","projects"]
     failurePolicy: Ignore
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: user-admission
+webhooks:
+  - name: user-admission.cust.local
+    clientConfig:
+      service:
+        name: user-admission
+        namespace: user-admission
+        path: "/user-admission"
+      caBundle: ${CA_BUNDLE}
+    rules:
+      - operations: ["CREATE"]
+        apiGroups: ["", "user.openshift.io"]
+        apiVersions: ["v1"]
+        resources: ["users","serviceaccounts"]
+    failurePolicy: Ignore
+
