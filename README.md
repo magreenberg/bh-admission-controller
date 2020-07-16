@@ -1,4 +1,4 @@
-# namespace-admission-controller
+# bh-admission-controller
 
 Mutating Admission Controller Webhook
 
@@ -52,16 +52,16 @@ Build the image using either the Red Hat UBI base image of the golang image.
 
 ### Network Connected Go Build Using Red Hat UBI
 ```
-    $ docker build -t ${REGISTRY}/namespace-admission:latest .
+    $ docker build -t ${REGISTRY}/bh-admission:latest .
 ```
 ### Network Disconnected Go Build Using golang:1.12.4-alpine
 ```
-    $ docker build -f Dockerfile.golang-1.12.4-alpine -t ${REGISTRY}/namespace-admission:latest .
+    $ docker build -f Dockerfile.golang-1.12.4-alpine -t ${REGISTRY}/bh-admission:latest .
 ```
 ## Push
 Push the image to your registry.
 ```
-    $ docker push ${REGISTRY}/namespace-admission:latest
+    $ docker push ${REGISTRY}/bh-admission:latest
 ```
 # Running
 
@@ -71,7 +71,7 @@ Before running the deployment, update the "image:" line in the file deploy.yaml 
 ## Run Commands
 Run the following commands:
 ```
-    $ oc new-project namespace-admission
+    $ oc new-project bh-admission
     $ ./gen-cert.sh
     $ ./ca-bundle.sh
     $ oc apply -f deploy.yaml
@@ -82,7 +82,7 @@ First watch for the running pod. For example:
 ```
     $ oc get pods
     NAME                                  READY   STATUS    RESTARTS   AGE
-    namespace-admission-789846c97-kqm6v   1/1     Running   0          7s
+    bh-admission-789846c97-kqm6v   1/1     Running   0          7s
 ```
 
 Create a project or namespace. For example:
@@ -113,9 +113,9 @@ The values can be updated in the deploy.yaml file.
 # Cleanup
 Run the following commands to delete objects created:
 ```
-    $ oc delete deployment namespace-admission -n namespace-admission
-    $ oc delete MutatingWebhookConfiguration/namespace-admission
-    $ oc delete project namespace-admission
-    $ oc delete csr/namespace-admission.namespace-admission
+    $ oc delete deployment bh-admission -n bh-admission
+    $ oc delete MutatingWebhookConfiguration/bh-admission
+    $ oc delete project bh-admission
+    $ oc delete csr/bh-admission.bh-admission
     $ oc delete project mynewproject
 ```

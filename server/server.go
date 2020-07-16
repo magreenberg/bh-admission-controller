@@ -23,15 +23,18 @@ type AdmissionControllerServer struct {
 }
 
 func (acs *AdmissionControllerServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// logrus.Debugln("ServerHTTP new request: ", r)
 	var body []byte
 	if data, err := ioutil.ReadAll(r.Body); err == nil {
 		body = data
 	}
+	// logrus.Debugln("RequestBody: ", body)
 	review := &v1beta1.AdmissionReview{}
 	_, _, err := acs.Decoder.Decode(body, nil, review)
 	if err != nil {
 		logrus.Errorln("Can't decode request", err)
 	}
+	logrus.Debugln("AdmissionReview: ", review)
 	// ignore errors for now
 	_ = acs.AdmissionController.HandleAdmission(review)
 	if responseInBytes, err := json.Marshal(review); err != nil {

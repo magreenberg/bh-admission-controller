@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	propertyFile = "/etc/webhook/namespace-admission-config/namespace-admission.properties"
+	propertyFile = "/etc/webhook/bh-admission-config/bh-admission.properties"
 	// TLSCert is the TLS certificate
 	TLSCert = "/etc/webhook/certs/cert.pem"
 	// TLSKey is the TLS key
@@ -59,7 +59,7 @@ func main() {
 	}()
 
 	listenAddr := viper.GetString(listenAddrKey)
-	nsac := webhook.NamespaceAdmission{
+	nsac := webhook.BhAdmission{
 		ExternalAPIURL:     viper.GetString(externalAPIURLKey),
 		ExternalAPITimeout: viper.GetInt32(externalAPITimeoutKey),
 		RequesterKey:       viper.GetString(requesterKey),

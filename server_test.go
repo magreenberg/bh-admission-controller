@@ -57,7 +57,7 @@ func encodeRequest(review *v1beta1.AdmissionReview) []byte {
 }
 
 func TestServeReturnsCorrectJson(t *testing.T) {
-	nsc := &webhook.NamespaceAdmission{}
+	nsc := &webhook.BhAdmission{}
 	server := httptest.NewServer(server.GetAdmissionServerNoSSL(nsc, ":8080").Handler)
 	requestString := string(encodeRequest(&admissionRequestNS))
 	myr := strings.NewReader(requestString)

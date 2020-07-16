@@ -14,7 +14,7 @@ data:
 apiVersion: v1
 kind: Service
 metadata:
-  name: bg-admission
+  name: bh-admission
   namespace: bh-admission
   labels:
     name: bh-admission
@@ -46,9 +46,9 @@ spec:
     spec:
       containers:
         - name: webhook
-          image: image-registry.openshift-image-registry.svc:5000/openshift/bh-admission:latest
+#          image: image-registry.openshift-image-registry.svc:5000/openshift/bh-admission:latest
 #          image: docker-registry.default.svc:5000/openshift/bh-admission:latest
-#          image: localhost:5000/bh-admission:latest
+          image: localhost:5000/bh-admission:latest
           imagePullPolicy: Always
           env:
             - name: DEBUG
@@ -80,38 +80,22 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1beta1
 kind: MutatingWebhookConfiguration
 metadata:
-  name: namespace-admission
+  name: bh-admission
 webhooks:
-  - name: namespace-admission.cust.local
+  - name: bh-admission.cust.local
     clientConfig:
       service:
         name: bh-admission
         namespace: bh-admission
-        path: "/namespace-admission"
+        path: "/"
       caBundle: ${CA_BUNDLE}
     rules:
       - operations: ["CREATE"]
         apiGroups: ["", "project.openshift.io"]
         apiVersions: ["v1"]
         resources: ["namespaces","projects"]
-    failurePolicy: Ignore
----
-apiVersion: admissionregistration.k8s.io/v1beta1
-kind: MutatingWebhookConfiguration
-metadata:
-  name: user-admission
-webhooks:
-  - name: user-admission.cust.local
-    clientConfig:
-      service:
-        name: user-admission
-        namespace: user-admission
-        path: "/user-admission"
-      caBundle: ${CA_BUNDLE}
-    rules:
       - operations: ["CREATE"]
         apiGroups: ["", "user.openshift.io"]
         apiVersions: ["v1"]
         resources: ["users","serviceaccounts"]
     failurePolicy: Ignore
-

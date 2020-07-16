@@ -1,5 +1,5 @@
 #!/bin/bash
-title="namespace-admission"
+title="bh-admission"
 
 # choose kubectl or oc
 if kubectl version > /dev/null 2>&1; then
@@ -11,7 +11,7 @@ else
     exit 1
 fi
 
-${KUBECTL} create namespace namespace-admission || true
+${KUBECTL} create namespace bh-admission || true
 
 csrName=${title}.${title}
 tmpdir=$(mktemp -d)
