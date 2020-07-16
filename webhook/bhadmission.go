@@ -97,7 +97,7 @@ func createPatch(ns *corev1.Namespace, annotations map[string]string) ([]byte, e
 	return json.Marshal(patch)
 }
 
-func prepareInvokeExternal(externalAPIURL string, externalAPITimeout int32, requestKind string, namespace string, userName string) error {
+func prepareAndInvokeExternal(externalAPIURL string, externalAPITimeout int32, requestKind string, namespace string, userName string) error {
 	var err error
 	if len(externalAPIURL) > 0 {
 		externalValues := &externalValues{
@@ -193,9 +193,16 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 				return &pt
 			}(),
 		}
-		err = prepareInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, namespaceName, requester)
+		prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, namespaceName, requester)
+	} else {
+		review.Response = &v1beta1.AdmissionResponse{
+			Allowed: true,
+			Result: &metav1.Status{
+				Message: "SUCCESS",
+			},
+		}
 	}
-	return err
+	return nil
 }
 
 func admitUserSA(review *v1beta1.AdmissionReview, externalAPIURL string, externalAPITimeout int32) error {
@@ -210,7 +217,15 @@ func admitUserSA(review *v1beta1.AdmissionReview, externalAPIURL string, externa
 			return nil
 		}
 	}
-	return prepareInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, request.Namespace, request.Name)
+	prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, request.Namespace, request.Name)
+
+	review.Response = &v1beta1.AdmissionResponse{
+		Allowed: true,
+		Result: &metav1.Status{
+			Message: "SUCCESS",
+		},
+	}
+	return nil
 }
 
 // HandleAdmission invoked when a new namespace or project is created
@@ -245,13 +260,6 @@ func (bhAdmission *BhAdmission) HandleAdmission(review *v1beta1.AdmissionReview)
 		} else {
 			logrus.Debug("Ignoring AdmissingRequest for type:", reqKind.Kind)
 		}
-	}
-
-	review.Response = &v1beta1.AdmissionResponse{
-		Allowed: true,
-		Result: &metav1.Status{
-			Message: "SUCCESS",
-		},
 	}
 	return nil
 }

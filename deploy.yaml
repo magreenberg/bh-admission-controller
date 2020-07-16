@@ -80,9 +80,9 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1beta1
 kind: MutatingWebhookConfiguration
 metadata:
-  name: bh-admission
+  name: bh-admission-mwc
 webhooks:
-  - name: bh-admission.cust.local
+  - name: bh-admission-mwc.cust.local
     clientConfig:
       service:
         name: bh-admission
@@ -94,6 +94,22 @@ webhooks:
         apiGroups: ["", "project.openshift.io"]
         apiVersions: ["v1"]
         resources: ["namespaces","projects"]
+    failurePolicy: Ignore
+
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: bh-admission-vwc
+webhooks:
+  - name: bh-admission-vwc.cust.local
+    clientConfig:
+      service:
+        name: bh-admission
+        namespace: bh-admission
+        path: "/"
+      caBundle: ${CA_BUNDLE}
+    rules:
       - operations: ["CREATE"]
         apiGroups: ["", "user.openshift.io"]
         apiVersions: ["v1"]
