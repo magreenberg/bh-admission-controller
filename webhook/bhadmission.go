@@ -140,7 +140,7 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 		requestsError.Inc()
 		return nil
 	}
-	logrus.Debugln("Unmarshalled Raw:", ns)
+	// logrus.Debugln("Unmarshalled Raw:", ns)
 
 	namespaceName := request.Name
 	if len(namespaceName) == 0 {
@@ -170,8 +170,7 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 			" in " +
 			namespaceName)
 
-		//annotations := map[string]string{BhAdmission.RequesterKey: requester}
-		annotations := map[string]string{}
+		annotations := map[string]string{requesterKey: requester}
 		patchBytes, err := createPatch(&ns, annotations)
 		if err != nil {
 			review.Response = &v1beta1.AdmissionResponse{
@@ -209,6 +208,14 @@ func admitUserSA(review *v1beta1.AdmissionReview, externalAPIURL string, externa
 	request := review.Request
 	requestKind := request.Kind.Kind
 
+	// Ensure that the request will succeed
+	review.Response = &v1beta1.AdmissionResponse{
+		Allowed: true,
+		Result: &metav1.Status{
+			Message: "SUCCESS",
+		},
+	}
+
 	if strings.EqualFold("ServiceAccount", requestKind) {
 		// ignore ServiceAccounts created automatically during project/namespace creation
 		if strings.EqualFold("system:serviceaccount:openshift-infra:serviceaccount-controller", request.UserInfo.Username) ||
@@ -219,12 +226,6 @@ func admitUserSA(review *v1beta1.AdmissionReview, externalAPIURL string, externa
 	}
 	prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, request.Namespace, request.Name)
 
-	review.Response = &v1beta1.AdmissionResponse{
-		Allowed: true,
-		Result: &metav1.Status{
-			Message: "SUCCESS",
-		},
-	}
 	return nil
 }
 
@@ -247,7 +248,7 @@ func (bhAdmission *BhAdmission) HandleAdmission(review *v1beta1.AdmissionReview)
 			startRequestTime := time.Now()
 			_ = admitNamespace(review, bhAdmission.ExternalAPIURL, bhAdmission.ExternalAPITimeout, bhAdmission.RequesterKey)
 			elapsed := time.Since(startRequestTime)
-			logrus.Debugln("request elapsed time=", elapsed.Seconds())
+			// logrus.Debugln("request elapsed time=", elapsed.Seconds())
 			requestsDuration.Observe(float64(elapsed.Seconds()))
 		} else if strings.EqualFold("User", requestKind) ||
 			strings.EqualFold("ServiceAccount", requestKind) {
@@ -255,7 +256,7 @@ func (bhAdmission *BhAdmission) HandleAdmission(review *v1beta1.AdmissionReview)
 			startRequestTime := time.Now()
 			_ = admitUserSA(review, bhAdmission.ExternalAPIURL, bhAdmission.ExternalAPITimeout)
 			elapsed := time.Since(startRequestTime)
-			logrus.Debugln("request elapsed time=", elapsed.Seconds())
+			// logrus.Debugln("request elapsed time=", elapsed.Seconds())
 			requestsDuration.Observe(float64(elapsed.Seconds()))
 		} else {
 			logrus.Debug("Ignoring AdmissingRequest for type:", reqKind.Kind)
