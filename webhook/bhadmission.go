@@ -26,9 +26,9 @@ type patchOperation struct {
 }
 
 type externalValues struct {
-	Kind      string
-	Namespace string
-	Name      string
+	Kind        string
+	Namespace   string
+	AccountName string
 }
 
 const (
@@ -97,13 +97,13 @@ func createPatch(ns *corev1.Namespace, annotations map[string]string) ([]byte, e
 	return json.Marshal(patch)
 }
 
-func prepareAndInvokeExternal(externalAPIURL string, externalAPITimeout int32, requestKind string, namespace string, userName string) error {
+func prepareAndInvokeExternal(externalAPIURL string, externalAPITimeout int32, requestKind string, namespace string, accountName string) error {
 	var err error
 	if len(externalAPIURL) > 0 {
 		externalValues := &externalValues{
-			Kind:      requestKind,
-			Namespace: namespace,
-			Name:      userName,
+			Kind:        requestKind,
+			Namespace:   namespace,
+			AccountName: accountName,
 		}
 		jsonStr, err := json.Marshal(externalValues)
 		if err != nil {
@@ -116,7 +116,7 @@ func prepareAndInvokeExternal(externalAPIURL string, externalAPITimeout int32, r
 				externalAPIError.Inc()
 			}
 			elapsedExternalAPI := time.Since(startExternalAPITime)
-			logrus.Debugln("externalAPI elapsed time=", elapsedExternalAPI.Seconds())
+			// logrus.Debugln("externalAPI elapsed time=", elapsedExternalAPI.Seconds())
 			externalAPIDuration.Observe(float64(elapsedExternalAPI.Seconds()))
 		}
 	}
@@ -142,6 +142,13 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 	}
 	// logrus.Debugln("Unmarshalled Raw:", ns)
 
+	review.Response = &v1beta1.AdmissionResponse{
+		Allowed: true,
+		Result: &metav1.Status{
+			Message: "SUCCESS",
+		},
+	}
+
 	namespaceName := request.Name
 	if len(namespaceName) == 0 {
 		// backwards compatibility for OCP 3
@@ -149,64 +156,73 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 		logrus.Debugln("Namespace set to:", namespaceName)
 	}
 
-	foundRequester := false
 	requester := request.UserInfo.Username
 	for key, value := range ns.Annotations {
 		// compatibility for OCP "oc new-project <project>"
 		if strings.EqualFold("openshift.io/requester", key) {
 			requester = value
+			logrus.Debugln("User set to:", requester)
+			break
 		} else if strings.EqualFold(requesterKey, key) {
-			foundRequester = true
-			logrus.Infoln("Found existing annotation: " + key + " " + value)
+			logrus.Infoln("Ignoring review as existing annotation found: " + key + "=" + value)
+			return nil
 		}
 	}
 
-	if !foundRequester {
-		requestsHandled.Inc()
-		logrus.Infoln("Creating annotation: " +
-			requesterKey +
-			"=" +
-			requester +
-			" in " +
-			namespaceName)
+	requestsHandled.Inc()
+	logrus.Infoln("Creating annotation: " +
+		requesterKey + "=" + requester +
+		" for namespace/project: " + namespaceName)
 
-		annotations := map[string]string{requesterKey: requester}
-		patchBytes, err := createPatch(&ns, annotations)
-		if err != nil {
-			review.Response = &v1beta1.AdmissionResponse{
-				Allowed: true,
-				Result: &metav1.Status{
-					Message: "createPatch failed",
-				},
-			}
-			requestsError.Inc()
-			return nil
-		}
-
-		logrus.Debugln("AdmissionResponse:", string(patchBytes))
-		review.Response = &v1beta1.AdmissionResponse{
-			Allowed: true,
-			Patch:   patchBytes,
-			PatchType: func() *v1beta1.PatchType {
-				pt := v1beta1.PatchTypeJSONPatch
-				return &pt
-			}(),
-		}
-		prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, namespaceName, requester)
-	} else {
+	annotations := map[string]string{requesterKey: requester}
+	patchBytes, err := createPatch(&ns, annotations)
+	if err != nil {
 		review.Response = &v1beta1.AdmissionResponse{
 			Allowed: true,
 			Result: &metav1.Status{
-				Message: "SUCCESS",
+				Message: "createPatch failed",
 			},
 		}
+		requestsError.Inc()
+		return nil
 	}
+
+	logrus.Debugln("AdmissionResponse:", string(patchBytes))
+	review.Response = &v1beta1.AdmissionResponse{
+		Allowed: true,
+		Patch:   patchBytes,
+		PatchType: func() *v1beta1.PatchType {
+			pt := v1beta1.PatchTypeJSONPatch
+			return &pt
+		}(),
+	}
+	prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, namespaceName, requester)
 	return nil
 }
 
 func admitUserSA(review *v1beta1.AdmissionReview, externalAPIURL string, externalAPITimeout int32) error {
 	request := review.Request
 	requestKind := request.Kind.Kind
+	requestName := request.Name
+
+	if len(requestName) == 0 {
+		// backwards compatibility for OCP 3
+		var sa corev1.ServiceAccount
+		if err := json.Unmarshal(request.Object.Raw, &sa); err != nil {
+			logrus.Errorln("Failed to unmarshal service account information:", err)
+			review.Response = &v1beta1.AdmissionResponse{
+				Allowed: true,
+				Result: &metav1.Status{
+					Message: "Failed!",
+				},
+			}
+			requestsError.Inc()
+			return nil
+		}
+		// logrus.Debugln("Unmarshalled Raw:", sa)
+		requestName = sa.GetName()
+		logrus.Debugln("Name set to:", requestName)
+	}
 
 	// Ensure that the request will succeed
 	review.Response = &v1beta1.AdmissionResponse{
@@ -220,11 +236,12 @@ func admitUserSA(review *v1beta1.AdmissionReview, externalAPIURL string, externa
 		// ignore ServiceAccounts created automatically during project/namespace creation
 		if strings.EqualFold("system:serviceaccount:openshift-infra:serviceaccount-controller", request.UserInfo.Username) ||
 			strings.EqualFold("system:serviceaccount:kube-system:service-account-controller", request.UserInfo.Username) {
-			logrus.Debugln("Ignoring automatically generated service account:", request.Name)
+			logrus.Debugln("Ignoring automatically generated service account:", requestName)
 			return nil
 		}
 	}
-	prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, request.Namespace, request.Name)
+
+	prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, request.Namespace, requestName)
 
 	return nil
 }
