@@ -39,23 +39,55 @@ const (
 )
 
 var (
-
-	// TODO - add counters for user/serviceaccounts
 	requestsTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Name: prefix + "_requests_total",
 		Help: "The total number of processed requests",
+	})
+	namespaceRequestsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: prefix + "_" + prefixNamespace + "_requests_total",
+		Help: "The total number of processed namespace requests",
+	})
+	accountRequestsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: prefix + "_" + prefixAccount + "_requests_total",
+		Help: "The total number of processed account requests",
 	})
 	requestsHandled = promauto.NewCounter(prometheus.CounterOpts{
 		Name: prefix + "_requests_handled",
 		Help: "The total number of processed requests",
 	})
+	namespaceRequestsHandled = promauto.NewCounter(prometheus.CounterOpts{
+		Name: prefix + "_" + prefixNamespace + "_requests_handled",
+		Help: "The total number of processed namespace requests",
+	})
+	accountRequestsHandled = promauto.NewCounter(prometheus.CounterOpts{
+		Name: prefix + "_" + prefixAccount + "_requests_handled",
+		Help: "The total number of processed account requests",
+	})
 	requestsError = promauto.NewCounter(prometheus.CounterOpts{
 		Name: prefix + "_requests_error",
 		Help: "The total number of requests in error",
 	})
+	namespaceRequestsError = promauto.NewCounter(prometheus.CounterOpts{
+		Name: prefix + "_" + prefixNamespace + "_requests_error",
+		Help: "The total number of namespace requests in error",
+	})
+	accountRequestsError = promauto.NewCounter(prometheus.CounterOpts{
+		Name: prefix + "_" + prefixAccount + "_requests_error",
+		Help: "The total number of accounts requests in error",
+	})
 	requestsDuration = promauto.NewHistogram(prometheus.HistogramOpts{
 		Name:    prefix + "_requests_duration",
-		Help:    "The durations of requests",
+		Help:    "The durations of all requests",
+		Buckets: prometheus.LinearBuckets(1, 3, 5),
+	})
+	namespaceRequestsDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    prefix + "_" + prefixNamespace + "_requests_duration",
+		Help:    "The durations of namespace requests",
+		Buckets: prometheus.LinearBuckets(1, 3, 5),
+	})
+	accountRequestsDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    prefix + "_" + prefixAccount + "_requests_duration",
+		Help:    "The durations of account requests",
 		Buckets: prometheus.LinearBuckets(1, 3, 5),
 	})
 	externalAPIError = promauto.NewCounter(prometheus.CounterOpts{
@@ -64,7 +96,7 @@ var (
 	})
 	externalAPIDuration = promauto.NewHistogram(prometheus.HistogramOpts{
 		Name:    prefix + "_external_api_duration",
-		Help:    "The durations of requests",
+		Help:    "The durations of external API invocations",
 		Buckets: prometheus.LinearBuckets(1, 3, 5),
 	})
 )
@@ -142,6 +174,7 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 			},
 		}
 		requestsError.Inc()
+		namespaceRequestsError.Inc()
 		return nil
 	}
 	// logrus.Debugln("Unmarshalled Raw:", ns)
@@ -167,6 +200,7 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 	}
 
 	requestsHandled.Inc()
+	namespaceRequestsHandled.Inc()
 	logrus.Infoln("Creating annotation: " +
 		requesterKey + "=" + requester +
 		" for namespace/project: " + namespaceName)
@@ -182,6 +216,7 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 			},
 		}
 		requestsError.Inc()
+		namespaceRequestsError.Inc()
 		return nil
 	}
 
@@ -204,6 +239,7 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 			},
 		}
 		requestsError.Inc()
+		namespaceRequestsError.Inc()
 	}
 	return nil
 }
@@ -226,6 +262,7 @@ func admitAccount(review *v1beta1.AdmissionReview, externalAPIURL string, extern
 				},
 			}
 			requestsError.Inc()
+			accountRequestsError.Inc()
 			return nil
 		}
 		// logrus.Debugln("Unmarshalled Raw:", sa)
@@ -250,6 +287,8 @@ func admitAccount(review *v1beta1.AdmissionReview, externalAPIURL string, extern
 		}
 	}
 
+	requestsHandled.Inc()
+	accountRequestsHandled.Inc()
 	err := prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, request.Namespace, requestName)
 	if err != nil {
 		review.Response = &v1beta1.AdmissionResponse{
@@ -260,6 +299,7 @@ func admitAccount(review *v1beta1.AdmissionReview, externalAPIURL string, extern
 			},
 		}
 		requestsError.Inc()
+		accountRequestsError.Inc()
 	}
 	return nil
 }
@@ -294,19 +334,23 @@ func (bhAdmission *BhAdmission) HandleAdmission(review *v1beta1.AdmissionReview)
 		if strings.EqualFold("Namespace", requestKind) ||
 			strings.EqualFold("Project", requestKind) {
 			requestsTotal.Inc()
+			namespaceRequestsTotal.Inc()
 			startRequestTime := time.Now()
 			_ = admitNamespace(review, bhAdmission.ExternalAPIURL, bhAdmission.ExternalAPITimeout, bhAdmission.RequesterKey)
 			elapsed := time.Since(startRequestTime)
 			// logrus.Debugln("request elapsed time=", elapsed.Seconds())
 			requestsDuration.Observe(float64(elapsed.Seconds()))
+			namespaceRequestsDuration.Observe(float64(elapsed.Seconds()))
 		} else if strings.EqualFold("User", requestKind) ||
 			strings.EqualFold("ServiceAccount", requestKind) {
 			requestsTotal.Inc()
 			startRequestTime := time.Now()
+			accountRequestsTotal.Inc()
 			_ = admitAccount(review, bhAdmission.ExternalAPIURL, bhAdmission.ExternalAPITimeout)
 			elapsed := time.Since(startRequestTime)
 			// logrus.Debugln("request elapsed time=", elapsed.Seconds())
 			requestsDuration.Observe(float64(elapsed.Seconds()))
+			accountRequestsDuration.Observe(float64(elapsed.Seconds()))
 		} else {
 			logrus.Debug("Ignoring AdmissingRequest for type:", reqKind.Kind)
 		}
