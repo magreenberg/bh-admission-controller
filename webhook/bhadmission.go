@@ -8,6 +8,7 @@ import (
 	"k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -134,7 +135,7 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 		review.Response = &v1beta1.AdmissionResponse{
 			Allowed: true,
 			Result: &metav1.Status{
-				Status: "Failure",
+				Status:  metav1.StatusFailure,
 				Message: "Failed to unmarshal: " + err.Error(),
 			},
 		}
@@ -174,7 +175,7 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 		review.Response = &v1beta1.AdmissionResponse{
 			Allowed: true,
 			Result: &metav1.Status{
-				Status: "Failure",
+				Status:  metav1.StatusFailure,
 				Message: "createPatch failed: " + err.Error(),
 			},
 		}
@@ -196,7 +197,7 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 		review.Response = &v1beta1.AdmissionResponse{
 			Allowed: true,
 			Result: &metav1.Status{
-				Status: "Failure", 
+				Status:  metav1.StatusFailure,
 				Message: "invokeExternal failed: " + err.Error(),
 			},
 		}
@@ -205,7 +206,7 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 	return nil
 }
 
-func admitUserSA(review *v1beta1.AdmissionReview, externalAPIURL string, externalAPITimeout int32) error {
+func admitAccount(review *v1beta1.AdmissionReview, externalAPIURL string, externalAPITimeout int32) error {
 	request := review.Request
 	requestKind := request.Kind.Kind
 	requestName := request.Name
@@ -218,7 +219,7 @@ func admitUserSA(review *v1beta1.AdmissionReview, externalAPIURL string, externa
 			review.Response = &v1beta1.AdmissionResponse{
 				Allowed: true,
 				Result: &metav1.Status{
-					Status: "Failure",
+					Status:  metav1.StatusFailure,
 					Message: "Failed to unmarshal service account information:" + err.Error(),
 				},
 			}
@@ -234,7 +235,7 @@ func admitUserSA(review *v1beta1.AdmissionReview, externalAPIURL string, externa
 	review.Response = &v1beta1.AdmissionResponse{
 		Allowed: true,
 		Result: &metav1.Status{
-			Status: "Success",
+			Status: metav1.StatusSuccess,
 		},
 	}
 
@@ -252,7 +253,7 @@ func admitUserSA(review *v1beta1.AdmissionReview, externalAPIURL string, externa
 		review.Response = &v1beta1.AdmissionResponse{
 			Allowed: true,
 			Result: &metav1.Status{
-				Status: "Failure", 
+				Status:  metav1.StatusFailure,
 				Message: "invokeExternal failed: " + err.Error(),
 			},
 		}
@@ -263,6 +264,13 @@ func admitUserSA(review *v1beta1.AdmissionReview, externalAPIURL string, externa
 
 // HandleAdmission invoked when a new namespace or project is created
 func (bhAdmission *BhAdmission) HandleAdmission(review *v1beta1.AdmissionReview) error {
+	defer func() {
+		if r := recover(); r != nil {
+			logrus.Error("Recovering from panic:\n", string(debug.Stack()))
+			return
+		}
+	}()
+
 	logrus.WithFields(logrus.Fields{
 		"Operation": review.Request.Operation,
 		"Kind":      review.Request.Kind.Kind,
@@ -286,7 +294,7 @@ func (bhAdmission *BhAdmission) HandleAdmission(review *v1beta1.AdmissionReview)
 			strings.EqualFold("ServiceAccount", requestKind) {
 			requestsTotal.Inc()
 			startRequestTime := time.Now()
-			_ = admitUserSA(review, bhAdmission.ExternalAPIURL, bhAdmission.ExternalAPITimeout)
+			_ = admitAccount(review, bhAdmission.ExternalAPIURL, bhAdmission.ExternalAPITimeout)
 			elapsed := time.Since(startRequestTime)
 			// logrus.Debugln("request elapsed time=", elapsed.Seconds())
 			requestsDuration.Observe(float64(elapsed.Seconds()))
