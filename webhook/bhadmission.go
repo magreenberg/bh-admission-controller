@@ -134,20 +134,14 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 		review.Response = &v1beta1.AdmissionResponse{
 			Allowed: true,
 			Result: &metav1.Status{
-				Message: "Failed!",
+				Status: "Failure",
+				Message: "Failed to unmarshal: " + err.Error(),
 			},
 		}
 		requestsError.Inc()
 		return nil
 	}
 	// logrus.Debugln("Unmarshalled Raw:", ns)
-
-	review.Response = &v1beta1.AdmissionResponse{
-		Allowed: true,
-		Result: &metav1.Status{
-			Message: "SUCCESS",
-		},
-	}
 
 	namespaceName := request.Name
 	if len(namespaceName) == 0 {
@@ -180,7 +174,8 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 		review.Response = &v1beta1.AdmissionResponse{
 			Allowed: true,
 			Result: &metav1.Status{
-				Message: "createPatch failed",
+				Status: "Failure",
+				Message: "createPatch failed: " + err.Error(),
 			},
 		}
 		requestsError.Inc()
@@ -196,7 +191,17 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 			return &pt
 		}(),
 	}
-	prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, namespaceName, requester)
+	err = prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, namespaceName, requester)
+	if err != nil {
+		review.Response = &v1beta1.AdmissionResponse{
+			Allowed: true,
+			Result: &metav1.Status{
+				Status: "Failure", 
+				Message: "invokeExternal failed: " + err.Error(),
+			},
+		}
+		requestsError.Inc()
+	}
 	return nil
 }
 
@@ -213,7 +218,8 @@ func admitUserSA(review *v1beta1.AdmissionReview, externalAPIURL string, externa
 			review.Response = &v1beta1.AdmissionResponse{
 				Allowed: true,
 				Result: &metav1.Status{
-					Message: "Failed!",
+					Status: "Failure",
+					Message: "Failed to unmarshal service account information:" + err.Error(),
 				},
 			}
 			requestsError.Inc()
@@ -228,7 +234,7 @@ func admitUserSA(review *v1beta1.AdmissionReview, externalAPIURL string, externa
 	review.Response = &v1beta1.AdmissionResponse{
 		Allowed: true,
 		Result: &metav1.Status{
-			Message: "SUCCESS",
+			Status: "Success",
 		},
 	}
 
@@ -241,8 +247,17 @@ func admitUserSA(review *v1beta1.AdmissionReview, externalAPIURL string, externa
 		}
 	}
 
-	prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, request.Namespace, requestName)
-
+	err := prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, request.Namespace, requestName)
+	if err != nil {
+		review.Response = &v1beta1.AdmissionResponse{
+			Allowed: true,
+			Result: &metav1.Status{
+				Status: "Failure", 
+				Message: "invokeExternal failed: " + err.Error(),
+			},
+		}
+		requestsError.Inc()
+	}
 	return nil
 }
 
