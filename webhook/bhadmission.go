@@ -33,7 +33,9 @@ type externalValues struct {
 }
 
 const (
-	prefix = "BhAdmission"
+	prefix          = "bhadmission"
+	prefixNamespace = "namespace"
+	prefixAccount   = "account"
 )
 
 var (
@@ -267,6 +269,13 @@ func (bhAdmission *BhAdmission) HandleAdmission(review *v1beta1.AdmissionReview)
 	defer func() {
 		if r := recover(); r != nil {
 			logrus.Error("Recovering from panic:\n", string(debug.Stack()))
+			review.Response = &v1beta1.AdmissionResponse{
+				Allowed: true,
+				Result: &metav1.Status{
+					Status:  metav1.StatusFailure,
+					Message: "Internal error",
+				},
+			}
 			return
 		}
 	}()
