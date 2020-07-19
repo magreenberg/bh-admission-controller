@@ -34,7 +34,7 @@ func (acs *AdmissionControllerServer) ServeHTTP(w http.ResponseWriter, r *http.R
 	if err != nil {
 		logrus.Errorln("Can't decode request", err)
 	}
-	logrus.Debugln("AdmissionReview: ", review)
+	// logrus.Debugln("AdmissionReview: ", review)
 	// ignore errors for now
 	_ = acs.AdmissionController.HandleAdmission(review)
 	if responseInBytes, err := json.Marshal(review); err != nil {
