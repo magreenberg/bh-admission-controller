@@ -1,4 +1,32 @@
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: bh-admission-getter-cr
+rules:
+- apiGroups: ["","user.openshift.io"]
+  resources: ["namespaces","projects","users","serviceaccounts"]
+  verbs: ["get"]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bh-admission-sa
+  namespace: bh-admission
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: bh-admission-getter-crb
+subjects:
+- kind: ServiceAccount
+  name: bh-admission-sa
+  namespace: bh-admission
+roleRef:
+  kind: ClusterRole
+  name: bh-admission-getter-cr
+  apiGroup: rbac.authorization.k8s.io
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -46,9 +74,9 @@ spec:
     spec:
       containers:
         - name: webhook
-#          image: image-registry.openshift-image-registry.svc:5000/openshift/bh-admission:latest
+          image: image-registry.openshift-image-registry.svc:5000/openshift/bh-admission:latest
 #          image: docker-registry.default.svc:5000/openshift/bh-admission:latest
-          image: localhost:5000/bh-admission:latest
+#          image: localhost:5000/bh-admission:latest
           imagePullPolicy: Always
           env:
             - name: DEBUG
@@ -69,6 +97,7 @@ spec:
               readOnly: true
           securityContext:
             readOnlyRootFilesystem: true
+      serviceAccountName: bh-admission-sa
       volumes:
         - name: webhook-certs
           secret:

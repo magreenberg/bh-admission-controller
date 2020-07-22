@@ -11,6 +11,10 @@ import (
 	"runtime/debug"
 	"strings"
 	"time"
+
+	userv1client "github.com/openshift/client-go/user/clientset/versioned/typed/user/v1"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
+	restclient "k8s.io/client-go/rest"
 )
 
 // BhAdmission request
@@ -18,6 +22,7 @@ type BhAdmission struct {
 	ExternalAPIURL     string
 	ExternalAPITimeout int32
 	RequesterKey       string
+	RestConfig         restclient.Config
 }
 
 type patchOperation struct {
@@ -158,7 +163,7 @@ func prepareAndInvokeExternal(externalAPIURL string, externalAPITimeout int32, r
 	return err
 }
 
-func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, externalAPITimeout int32, requesterKey string) error {
+func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, externalAPITimeout int32, requesterKey string, restConfig restclient.Config) error {
 	var err error
 	request := review.Request
 	reqKind := request.Kind
@@ -177,7 +182,7 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 		namespaceRequestsError.Inc()
 		return nil
 	}
-	// logrus.Debugln("Unmarshalled Raw:", ns)
+	// logrus.Debugln("Unmarshalled ns:", ns)
 
 	namespaceName := request.Name
 	if len(namespaceName) == 0 {
@@ -187,12 +192,27 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 	}
 
 	requester := request.UserInfo.Username
-	for key, value := range ns.Annotations {
+	existingAnnotations := ns.Annotations
+	logrus.Println("ns.Annotations=", ns.Annotations)
+	if len(ns.Annotations) == 0 {
+		// annotations are not included with "Namespace" creation
+		coreclient, err := corev1client.NewForConfig(&restConfig)
+		if err != nil {
+			panic(err)
+		}
+		nsQuery, err := coreclient.Namespaces().Get(namespaceName, metav1.GetOptions{})
+		if err == nil {
+			existingAnnotations = nsQuery.Annotations
+			logrus.Debugln("Found existing annotations", existingAnnotations)
+		}
+	}
+	for key, value := range existingAnnotations {
+		logrus.Println("key,value=", key+","+value)
 		// compatibility for OCP "oc new-project <project>"
 		if strings.EqualFold("openshift.io/requester", key) {
 			requester = value
 			logrus.Debugln("User set to:", requester)
-			break
+			// continue check whether the requesterKey exists
 		} else if strings.EqualFold(requesterKey, key) {
 			logrus.Infoln("Ignoring review as existing annotation found: " + key + "=" + value)
 			return nil
@@ -205,8 +225,8 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 		requesterKey + "=" + requester +
 		" for namespace/project: " + namespaceName)
 
-	annotations := map[string]string{requesterKey: requester}
-	patchBytes, err := createPatch(&ns, annotations)
+	newAnnotation := map[string]string{requesterKey: requester}
+	patchBytes, err := createPatch(&ns, newAnnotation)
 	if err != nil {
 		review.Response = &v1beta1.AdmissionResponse{
 			Allowed: true,
@@ -244,7 +264,7 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 	return nil
 }
 
-func admitAccount(review *v1beta1.AdmissionReview, externalAPIURL string, externalAPITimeout int32) error {
+func admitAccount(review *v1beta1.AdmissionReview, externalAPIURL string, externalAPITimeout int32, restConfig restclient.Config) error {
 	request := review.Request
 	requestKind := request.Kind.Kind
 	requestName := request.Name
@@ -284,6 +304,31 @@ func admitAccount(review *v1beta1.AdmissionReview, externalAPIURL string, extern
 			strings.EqualFold("system:serviceaccount:kube-system:service-account-controller", request.UserInfo.Username) {
 			logrus.Debugln("Ignoring automatically generated service account:", requestName)
 			return nil
+		}
+		coreclient, err := corev1client.NewForConfig(&restConfig)
+		if err != nil {
+			panic(err)
+		}
+		_, err = coreclient.ServiceAccounts(request.Namespace).Get(requestName, metav1.GetOptions{})
+		if err == nil {
+			logrus.WithFields(logrus.Fields{
+				"Namespace":      request.Namespace,
+				"ServiceAccount": requestName,
+			}).Debug("Ignoring existing service account")
+			return nil
+		}
+	} else {
+		// check for existing entry with the same name
+		if strings.EqualFold("User", requestKind) {
+			userClient, err := userv1client.NewForConfig(&restConfig)
+			if err != nil {
+				panic(err)
+			}
+			_, err = userClient.Users().Get(requestName, metav1.GetOptions{})
+			if err == nil {
+				logrus.Println("Ignoring existing user:", requestName)
+				return nil
+			}
 		}
 	}
 
@@ -336,7 +381,7 @@ func (bhAdmission *BhAdmission) HandleAdmission(review *v1beta1.AdmissionReview)
 			requestsTotal.Inc()
 			namespaceRequestsTotal.Inc()
 			startRequestTime := time.Now()
-			_ = admitNamespace(review, bhAdmission.ExternalAPIURL, bhAdmission.ExternalAPITimeout, bhAdmission.RequesterKey)
+			_ = admitNamespace(review, bhAdmission.ExternalAPIURL, bhAdmission.ExternalAPITimeout, bhAdmission.RequesterKey, bhAdmission.RestConfig)
 			elapsed := time.Since(startRequestTime)
 			// logrus.Debugln("request elapsed time=", elapsed.Seconds())
 			requestsDuration.Observe(float64(elapsed.Seconds()))
@@ -346,7 +391,7 @@ func (bhAdmission *BhAdmission) HandleAdmission(review *v1beta1.AdmissionReview)
 			requestsTotal.Inc()
 			startRequestTime := time.Now()
 			accountRequestsTotal.Inc()
-			_ = admitAccount(review, bhAdmission.ExternalAPIURL, bhAdmission.ExternalAPITimeout)
+			_ = admitAccount(review, bhAdmission.ExternalAPIURL, bhAdmission.ExternalAPITimeout, bhAdmission.RestConfig)
 			elapsed := time.Since(startRequestTime)
 			// logrus.Debugln("request elapsed time=", elapsed.Seconds())
 			requestsDuration.Observe(float64(elapsed.Seconds()))

@@ -9,6 +9,9 @@ import (
 	"os"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	//buildv1client "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 const (
@@ -46,6 +49,26 @@ func main() {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 
+	// Instantiate loader for kubeconfig file.
+	kubeconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		clientcmd.NewDefaultClientConfigLoadingRules(),
+		&clientcmd.ConfigOverrides{},
+	)
+
+	// Determine the Namespace referenced by the current context in the
+	// kubeconfig file.
+	namespace, _, err := kubeconfig.Namespace()
+	if err != nil {
+		panic(err)
+	}
+	logrus.Println("namespace=", namespace)
+	// Get a rest.Config from the kubeconfig file.  This will be passed into all
+	// the client objects we create.
+	restconfig, err := kubeconfig.ClientConfig()
+	if err != nil {
+		panic(err)
+	}
+
 	go func() {
 		metricsAddr := viper.GetString(metricsAddrKey)
 		// blocking method needs to run in a separate thread
@@ -63,6 +86,7 @@ func main() {
 		ExternalAPIURL:     viper.GetString(externalAPIURLKey),
 		ExternalAPITimeout: viper.GetInt32(externalAPITimeoutKey),
 		RequesterKey:       viper.GetString(requesterKey),
+		RestConfig:         *restconfig,
 	}
 	s := server.GetAdmissionValidationServer(&nsac, TLSCert, TLSKey, listenAddr)
 	logrus.Println("Webhook starting to listen on ", listenAddr)
