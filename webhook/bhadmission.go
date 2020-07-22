@@ -193,7 +193,7 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 
 	requester := request.UserInfo.Username
 	existingAnnotations := ns.Annotations
-	logrus.Println("ns.Annotations=", ns.Annotations)
+	// logrus.Println("ns.Annotations=", ns.Annotations)
 	if len(ns.Annotations) == 0 {
 		// annotations are not included with "Namespace" creation
 		coreclient, err := corev1client.NewForConfig(&restConfig)
@@ -203,11 +203,10 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 		nsQuery, err := coreclient.Namespaces().Get(namespaceName, metav1.GetOptions{})
 		if err == nil {
 			existingAnnotations = nsQuery.Annotations
-			logrus.Debugln("Found existing annotations", existingAnnotations)
+			// logrus.Debugln("Found existing annotations", existingAnnotations)
 		}
 	}
 	for key, value := range existingAnnotations {
-		logrus.Println("key,value=", key+","+value)
 		// compatibility for OCP "oc new-project <project>"
 		if strings.EqualFold("openshift.io/requester", key) {
 			requester = value
