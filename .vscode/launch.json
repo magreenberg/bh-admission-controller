@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Attach forwarded port",
+      "type": "go",
+      "request": "attach",
+      "mode": "remote",
+      "remotePath": "/namespace-admission-controller",
+      "host": "localhost",
+      "port": 40000,
+      "showLog": true
+    }
+  ] 
+}

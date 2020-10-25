@@ -58,6 +58,10 @@ Build the image using either the Red Hat UBI base image of the golang image.
 ```
     $ docker build -f Dockerfile.golang-1.12.4-alpine -t ${REGISTRY}/bh-admission:latest .
 ```
+Alternatively, create a debug build by running:
+```
+    $ docker build -f Dockerfile.golang-1.12.4-alpine -t ${REGISTRY}/bh-admission:latest -f Dockerfile.golang-1.12.4-alpine.debug .
+```
 ## Push
 Push the image to your registry.
 ```

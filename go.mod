@@ -3,6 +3,7 @@ module namespace-admission-controller
 go 1.14
 
 require (
+	github.com/go-delve/delve v1.5.0 // indirect
 	github.com/imdario/mergo v0.3.10 // indirect
 	github.com/openshift/client-go v0.0.0-20200116152001-92a2713fa240
 	github.com/prometheus/client_golang v0.9.3
