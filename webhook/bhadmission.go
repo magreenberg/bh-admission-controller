@@ -22,18 +22,6 @@ type BhAdmission struct {
 	ClusterName        string
 }
 
-type patchOperation struct {
-	Op    string      `json:"op"`
-	Path  string      `json:"path"`
-	Value interface{} `json:"value,omitempty"`
-}
-
-type externalValues struct {
-	Kind        string
-	Namespace   string
-	AccountName string
-}
-
 const (
 	prefix          = "bhadmission"
 	prefixNamespace = "namespace"
@@ -135,7 +123,7 @@ func (bhAdmission *BhAdmission) HandleAdmission(review *v1beta1.AdmissionReview)
 			requestsTotal.Inc()
 			namespaceRequestsTotal.Inc()
 			startRequestTime := time.Now()
-			_ = admitNamespace(review, bhAdmission.ExternalAPIURL, bhAdmission.ExternalAPITimeout, bhAdmission.RequesterKey, bhAdmission.RestConfig)
+			_ = admitNamespace(review, bhAdmission.ExternalAPIURL, bhAdmission.ExternalAPITimeout, bhAdmission.RequesterKey, bhAdmission.RestConfig, bhAdmission.ClusterName)
 			elapsed := time.Since(startRequestTime)
 			// logrus.Debugln("request elapsed time=", elapsed.Seconds())
 			requestsDuration.Observe(float64(elapsed.Seconds()))
@@ -145,7 +133,7 @@ func (bhAdmission *BhAdmission) HandleAdmission(review *v1beta1.AdmissionReview)
 			requestsTotal.Inc()
 			startRequestTime := time.Now()
 			accountRequestsTotal.Inc()
-			_ = admitAccount(review, bhAdmission.ExternalAPIURL, bhAdmission.ExternalAPITimeout, bhAdmission.RestConfig)
+			_ = admitAccount(review, bhAdmission.ExternalAPIURL, bhAdmission.ExternalAPITimeout, bhAdmission.RestConfig, bhAdmission.ClusterName)
 			elapsed := time.Since(startRequestTime)
 			// logrus.Debugln("request elapsed time=", elapsed.Seconds())
 			requestsDuration.Observe(float64(elapsed.Seconds()))

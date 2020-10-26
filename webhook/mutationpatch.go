@@ -5,25 +5,26 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+type patchOperation struct {
+	Op    string      `json:"op"`
+	Path  string      `json:"path"`
+	Value interface{} `json:"value,omitempty"`
+}
+
 func updateAnnotation(target map[string]string, added map[string]string) (patch []patchOperation) {
-	for key, value := range added {
-		if target == nil || target[key] == "" {
-			target = map[string]string{}
-			patch = append(patch, patchOperation{
-				Op:   "add",
-				Path: "/metadata/annotations",
-				Value: map[string]string{
-					key: value,
-				},
-			})
-		} else {
-			patch = append(patch, patchOperation{
-				Op:    "replace",
-				Path:  "/metadata/annotations/" + key,
-				Value: value,
-			})
-		}
+	mergedMap := map[string]string{}
+	for k, v := range target {
+		mergedMap[k] = v
 	}
+	for k, v := range added {
+		mergedMap[k] = v
+	}
+	po := patchOperation{
+		Op:    "add",
+		Path:  "/metadata/annotations",
+		Value: mergedMap,
+	}
+	patch = append(patch, po)
 	return patch
 }
 

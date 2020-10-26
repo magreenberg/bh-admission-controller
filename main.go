@@ -6,7 +6,10 @@ import (
 	"namespace-admission-controller/server"
 	"namespace-admission-controller/webhook"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -27,7 +30,24 @@ const (
 	externalAPIURLKey       = "external_api_url"
 	externalAPITimeoutKey   = "external_api_timeout"
 	requesterKey            = "requester_key"
+	clusterNameKey          = "cluster_name_key"
 )
+
+func getClustername(urlString string) (string, error) {
+	u, err := url.Parse(urlString)
+	clusterName := ""
+	if err == nil {
+		h1 := strings.Split(u.Hostname(), ".")
+		if len(h1) > 1 {
+			clusterName = h1[1]
+			_, err := strconv.Atoi(clusterName)
+			if err == nil {
+				logrus.Warn("cluster name was not automatically detected.")
+			}
+		}
+	}
+	return clusterName, err
+}
 
 func main() {
 	// set up defaults
@@ -62,6 +82,19 @@ func main() {
 		panic(err)
 	}
 	logrus.Println("namespace=", namespace)
+
+	clusterName := viper.GetString(clusterNameKey)
+	if len(clusterName) == 0 {
+		// clientConfig.HOST gave IP address
+		clientConfig, err := kubeconfig.ClientConfig()
+		if err != nil {
+			panic(err)
+		}
+		clusterName, _ = getClustername(clientConfig.Host)
+		logrus.Println("clusterName=", clusterName)
+		rawConfig, _ := kubeconfig.RawConfig()
+		logrus.Println("rawConfig.CurrentContext =", rawConfig.CurrentContext)
+	}
 	// Get a rest.Config from the kubeconfig file.  This will be passed into all
 	// the client objects we create.
 	restconfig, err := kubeconfig.ClientConfig()
@@ -87,6 +120,7 @@ func main() {
 		ExternalAPITimeout: viper.GetInt32(externalAPITimeoutKey),
 		RequesterKey:       viper.GetString(requesterKey),
 		RestConfig:         *restconfig,
+		ClusterName:        clusterName,
 	}
 	s := server.GetAdmissionValidationServer(&nsac, TLSCert, TLSKey, listenAddr)
 	logrus.Println("Webhook starting to listen on ", listenAddr)

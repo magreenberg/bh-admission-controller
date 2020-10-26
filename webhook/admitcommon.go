@@ -5,13 +5,24 @@ import (
 	"github.com/sirupsen/logrus"
 	"time"
 )
-func prepareAndInvokeExternal(externalAPIURL string, externalAPITimeout int32, requestKind string, namespace string, accountName string) error {
+
+type externalValues struct {
+	// Kind        string
+	// Namespace   string
+	// AccountName string
+	EnvName     string `json:"envName"`
+	ClusterName string `json:"clusterName"`
+}
+
+func prepareAndInvokeExternal(externalAPIURL string, externalAPITimeout int32, requestKind string, namespace string, accountName string, clusterName string) error {
 	var err error
 	if len(externalAPIURL) > 0 {
 		externalValues := &externalValues{
-			Kind:        requestKind,
-			Namespace:   namespace,
-			AccountName: accountName,
+			// Kind:        requestKind,
+			// Namespace:   namespace,
+			// AccountName: accountName,
+			EnvName:     "build",
+			ClusterName: clusterName,
 		}
 		jsonStr, err := json.Marshal(externalValues)
 		if err != nil {

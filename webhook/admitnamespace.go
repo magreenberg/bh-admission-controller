@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, externalAPITimeout int32, requesterKey string, restConfig restclient.Config) error {
+func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, externalAPITimeout int32, requesterKey string, restConfig restclient.Config, clusterName string) error {
 	var err error
 	request := review.Request
 	reqKind := request.Kind
@@ -72,7 +72,11 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 		requesterKey + "=" + requester +
 		" for namespace/project: " + namespaceName)
 
-	newAnnotation := map[string]string{requesterKey: requester}
+	newAnnotation := map[string]string{
+		requesterKey:         requester,
+		"bnhp.cloudia/owner": requester,
+		"bnhp.cloudia/env":   "build",
+	}
 	patchBytes, err := createPatch(&ns, newAnnotation)
 	if err != nil {
 		review.Response = &v1beta1.AdmissionResponse{
@@ -96,7 +100,7 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 			return &pt
 		}(),
 	}
-	err = prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, namespaceName, requester)
+	err = prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, namespaceName, requester, clusterName)
 	if err != nil {
 		review.Response = &v1beta1.AdmissionResponse{
 			Allowed: true,

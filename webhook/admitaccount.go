@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-func admitAccount(review *v1beta1.AdmissionReview, externalAPIURL string, externalAPITimeout int32, restConfig restclient.Config) error {
+func admitAccount(review *v1beta1.AdmissionReview, externalAPIURL string, externalAPITimeout int32, restConfig restclient.Config, clusterName string) error {
 	request := review.Request
 	requestKind := request.Kind.Kind
 	requestName := request.Name
@@ -82,7 +82,7 @@ func admitAccount(review *v1beta1.AdmissionReview, externalAPIURL string, extern
 
 	requestsHandled.Inc()
 	accountRequestsHandled.Inc()
-	err := prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, request.Namespace, requestName)
+	err := prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, request.Namespace, requestName, clusterName)
 	if err != nil {
 		review.Response = &v1beta1.AdmissionResponse{
 			Allowed: true,

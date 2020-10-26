@@ -70,7 +70,9 @@ Push the image to your registry.
 # Running
 
 ## Image Name
-Before running the deployment, update the "image:" line in the file deploy.yaml to match your ${REGISTRY} above.
+Before running the deployment:
+- Update the "image:" line in the file deploy.yaml to match your ${REGISTRY} above.
+- Update the vales in the configmap.yaml file
 
 ## Run Commands
 Run the following commands:
@@ -78,6 +80,7 @@ Run the following commands:
     $ oc new-project bh-admission
     $ ./gen-cert.sh
     $ ./ca-bundle.sh
+    $ oc apply -f configmap.yaml
     $ oc apply -f deploy.yaml
 ```
 
