@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bh-admission-config
+  namespace: bh-admission
+data:
+  bh-admission.properties: |
+    external_api_url=http://external-api:443
+    external_api_timeout=10
+    requester_key=mycompany.com/requester
+    listen_addr=0.0.0.0:8080
+    cluster_name_key=devcluster
