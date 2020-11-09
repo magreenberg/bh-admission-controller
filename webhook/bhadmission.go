@@ -1,6 +1,7 @@
 package webhook
 
 import (
+	"encoding/json"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/sirupsen/logrus"
@@ -107,12 +108,37 @@ func (bhAdmission *BhAdmission) HandleAdmission(review *v1beta1.AdmissionReview)
 		}
 	}()
 
+	if review.Request == nil {
+		logrus.Info("EMPTY REQUEST for HandleAdmission - ignored")
+		review.Response = &v1beta1.AdmissionResponse{
+			Allowed: true,
+			Result: &metav1.Status{
+				Status:  metav1.StatusFailure,
+				Message: "Invalid AdmissionReview",
+			},
+		}
+		return nil
+	}
+
 	logrus.WithFields(logrus.Fields{
 		"Operation": review.Request.Operation,
 		"Kind":      review.Request.Kind.Kind,
 		"Name":      review.Request.Name,
 		"User":      review.Request.UserInfo.Username,
 	}).Info("NEW REQUEST for HandleAdmission")
+
+	// Code that prints the review as JSON in []byte format
+	b, err := json.Marshal(review)
+	if err != nil {
+		logrus.Debugln("failed to unmarshal review")
+	}
+	var rev v1beta1.AdmissionReview
+	if err := json.Unmarshal(b, &rev); err != nil {
+		logrus.Errorln("Failed to unmarshal review:", err)
+	}
+	logrus.WithFields(logrus.Fields{
+		"json": b,
+	}).Info("reviewAsJSON")
 
 	request := review.Request
 	reqKind := request.Kind
@@ -123,7 +149,7 @@ func (bhAdmission *BhAdmission) HandleAdmission(review *v1beta1.AdmissionReview)
 			requestsTotal.Inc()
 			namespaceRequestsTotal.Inc()
 			startRequestTime := time.Now()
-			_ = admitNamespace(review, bhAdmission.ExternalAPIURL, bhAdmission.ExternalAPITimeout, bhAdmission.RequesterKey, bhAdmission.RestConfig, bhAdmission.ClusterName)
+			_ = admitNamespace(review, bhAdmission.ExternalAPIURL, bhAdmission.ExternalAPITimeout, bhAdmission.RestConfig, bhAdmission.ClusterName)
 			elapsed := time.Since(startRequestTime)
 			// logrus.Debugln("request elapsed time=", elapsed.Seconds())
 			requestsDuration.Observe(float64(elapsed.Seconds()))

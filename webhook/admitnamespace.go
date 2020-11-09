@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, externalAPITimeout int32, requesterKey string, restConfig restclient.Config, clusterName string) error {
+func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, externalAPITimeout int32, restConfig restclient.Config, clusterName string) error {
 	var err error
 	request := review.Request
 	reqKind := request.Kind
@@ -40,6 +40,16 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 	}
 
 	// ignore existing objects
+
+	// A creationTimestamp in the request signifies an existing object
+	//logrus.Debugln("ns.ObjectMeta.GetCreationTimestamp=", ns.ObjectMeta.GetCreationTimestamp())
+	t := ns.ObjectMeta.GetCreationTimestamp()
+	if !t.IsZero() {
+		logrus.Info("Inoring create request for project/namespace with creationTime:", namespaceName)
+		return nil
+	}
+
+	// Check whether the object exists
 	coreclient, err := corev1client.NewForConfig(&restConfig)
 	if err != nil {
 		panic(err)
@@ -51,44 +61,48 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 	}
 
 	requester := request.UserInfo.Username
-	existingAnnotations := ns.Annotations
-	// logrus.Println("ns.Annotations=", ns.Annotations)
-	if len(ns.Annotations) == 0 {
-		// annotations are not included with "Namespace" creation
-		coreclient, err := corev1client.NewForConfig(&restConfig)
-		if err != nil {
-			panic(err)
-		}
-		nsQuery, err := coreclient.Namespaces().Get(namespaceName, metav1.GetOptions{})
-		if err == nil {
-			existingAnnotations = nsQuery.Annotations
-			// logrus.Debugln("Found existing annotations", existingAnnotations)
-		}
-	}
-	for key, value := range existingAnnotations {
+	requestedAnnotations := ns.Annotations
+	// // logrus.Println("ns.Annotations=", ns.Annotations)
+	// if len(ns.Annotations) == 0 {
+	// 	// annotations are not included with "Namespace" creation
+	// 	coreclient, err := corev1client.NewForConfig(&restConfig)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	nsQuery, err := coreclient.Namespaces().Get(namespaceName, metav1.GetOptions{})
+	// 	if err == nil {
+	// 		requestedAnnotations = nsQuery.Annotations
+	// 		// logrus.Debugln("Found existing annotations", requestedAnnotations)
+	// 	}
+	// }
+	for key, value := range requestedAnnotations {
 		// compatibility for OCP "oc new-project <project>"
 		if strings.EqualFold("openshift.io/requester", key) {
 			requester = value
-			logrus.Debugln("User set to:", requester)
+			logrus.WithFields(logrus.Fields{
+				"from request.UserInfo.Username":     request.UserInfo.Username,
+				"to provided openshift.io/requester": requester,
+			}).Debugln("requester changed")
 			// continue check whether the requesterKey exists
-		} else if strings.EqualFold(requesterKey, key) {
-			logrus.Infoln("Ignoring review as existing annotation found: " + key + "=" + value)
-			return nil
 		}
 	}
 
 	requestsHandled.Inc()
 	namespaceRequestsHandled.Inc()
-	logrus.Infoln("Creating annotation: " +
-		requesterKey + "=" + requester +
-		" for namespace/project: " + namespaceName)
 
-	newAnnotation := map[string]string{
-		requesterKey:         requester,
+	// logrus.Infoln("Creating annotations: " +
+	// 	requesterKey + "=" + requester +
+	// 	" for namespace/project: " + namespaceName)
+
+	newAnnotations := map[string]string{
+		"bnhp.com/requester": requester,
 		"bnhp.cloudia/owner": requester,
 		"bnhp.cloudia/env":   "build",
 	}
-	patchBytes, err := createPatch(&ns, newAnnotation)
+
+	finalAnnotations := mergeAnnotations(requestedAnnotations, newAnnotations)
+
+	patchBytes, err := createPatch(&ns, finalAnnotations)
 	if err != nil {
 		review.Response = &v1beta1.AdmissionResponse{
 			Allowed: true,
