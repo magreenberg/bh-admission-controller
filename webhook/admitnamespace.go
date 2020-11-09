@@ -39,6 +39,17 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 		logrus.Debugln("Namespace set to:", namespaceName)
 	}
 
+	// ignore existing objects
+	coreclient, err := corev1client.NewForConfig(&restConfig)
+	if err != nil {
+		panic(err)
+	}
+	_, err = coreclient.Namespaces().Get(namespaceName, metav1.GetOptions{})
+	if err == nil {
+		logrus.Info("Inoring create request for existing project/namespace:", namespaceName)
+		return nil
+	}
+
 	requester := request.UserInfo.Username
 	existingAnnotations := ns.Annotations
 	// logrus.Println("ns.Annotations=", ns.Annotations)

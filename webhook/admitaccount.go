@@ -62,7 +62,7 @@ func admitAccount(review *v1beta1.AdmissionReview, externalAPIURL string, extern
 			logrus.WithFields(logrus.Fields{
 				"Namespace":      request.Namespace,
 				"ServiceAccount": requestName,
-			}).Debug("Ignoring existing service account")
+			}).Info("Ignoring CREATE request for existing service account")
 			return nil
 		}
 	} else {
@@ -74,7 +74,7 @@ func admitAccount(review *v1beta1.AdmissionReview, externalAPIURL string, extern
 			}
 			_, err = userClient.Users().Get(requestName, metav1.GetOptions{})
 			if err == nil {
-				logrus.Println("Ignoring existing user:", requestName)
+				logrus.Info("Ignoring CREATE request for existing user:", requestName)
 				return nil
 			}
 		}
