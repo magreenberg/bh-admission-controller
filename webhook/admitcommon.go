@@ -14,7 +14,7 @@ type externalValues struct {
 	ClusterName string `json:"clusterName"`
 }
 
-func prepareAndInvokeExternal(externalAPIURL string, externalAPITimeout int32, requestKind string, namespace string, accountName string, clusterName string) error {
+func prepareAndInvokeExternal(externalAPIURL string, externalAPITimeout int32, identifier string, accountName string, clusterName string) error {
 	var err error
 	if len(externalAPIURL) > 0 {
 		externalValues := &externalValues{

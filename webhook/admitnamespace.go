@@ -14,8 +14,6 @@ import (
 func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, externalAPITimeout int32, restConfig restclient.Config, clusterName string) error {
 	var err error
 	request := review.Request
-	reqKind := request.Kind
-	requestKind := reqKind.Kind
 	var ns corev1.Namespace
 	if err = json.Unmarshal(request.Object.Raw, &ns); err != nil {
 		logrus.Errorln("Failed to unmarshal:", err)
@@ -90,19 +88,13 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 	requestsHandled.Inc()
 	namespaceRequestsHandled.Inc()
 
-	// logrus.Infoln("Creating annotations: " +
-	// 	requesterKey + "=" + requester +
-	// 	" for namespace/project: " + namespaceName)
-
 	newAnnotations := map[string]string{
 		"bnhp.com/requester": requester,
 		"bnhp.cloudia/owner": requester,
 		"bnhp.cloudia/env":   "build",
 	}
 
-	finalAnnotations := mergeAnnotations(requestedAnnotations, newAnnotations)
-
-	patchBytes, err := createPatch(&ns, finalAnnotations)
+	patchBytes, err := createPatch(ns.Annotations, newAnnotations)
 	if err != nil {
 		review.Response = &v1beta1.AdmissionResponse{
 			Allowed: true,
@@ -125,17 +117,6 @@ func admitNamespace(review *v1beta1.AdmissionReview, externalAPIURL string, exte
 			return &pt
 		}(),
 	}
-	err = prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, namespaceName, requester, clusterName)
-	if err != nil {
-		review.Response = &v1beta1.AdmissionResponse{
-			Allowed: true,
-			Result: &metav1.Status{
-				Status:  metav1.StatusFailure,
-				Message: "invokeExternal failed: " + err.Error(),
-			},
-		}
-		requestsError.Inc()
-		namespaceRequestsError.Inc()
-	}
+
 	return nil
 }

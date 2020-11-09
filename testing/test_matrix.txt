@@ -1,0 +1,31 @@
+Run everything below:
+  - from regular user
+  - from serviceaccount
+
+new account
+    - oc create user
+    - oc create -f user.yaml
+    - oc create -f user.yaml (with annotations)
+    - oc create user (for existing user) 
+    - oc create -f user.yaml (for existing user)
+
+new serviceaccount
+    - oc create serviceaccount
+    - oc create -f serviceaccount.yaml
+    - oc create -f userviceaccountser.yaml (with annotations)
+    - oc create serviceaccount (for existing serviceaccount) 
+    - oc create -f serviceaccount.yaml (for existing serviceaccount)
+
+new namespace
+    - oc create namespace
+    - oc create -f namespace.yaml
+    - oc create -f namespace.yaml (with annotations)
+    - oc create namespace (for existing namespace) 
+    - oc create -f namespace.yaml (for existing namespace)
+
+new project
+    - oc create project
+    - oc create -f project.yaml
+    - oc create -f project.yaml (with annotations)
+    - oc create project (for existing project) 
+    - oc create -f project.yaml (for existing project)

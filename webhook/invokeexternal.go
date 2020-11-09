@@ -9,6 +9,9 @@ import (
 	"time"
 )
 
+// InfraGateToken value
+var InfraGateToken string
+
 func invokeexternal(apiURL string, apiTimeout int32, jsondata string) error {
 	client := &http.Client{
 		Timeout: time.Duration(apiTimeout) * time.Second,

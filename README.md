@@ -126,3 +126,19 @@ Run the following commands to delete objects created:
     $ oc delete csr/bh-admission.bh-admission
     $ oc delete project mynewproject
 ```
+
+# Debugging
+## Port Forwarding
+Port forward from the development host to port 40000 on the pod
+```
+    $ oc get pods
+    $ oc port-forward podname 40000
+
+```
+## JSON request
+The following example, run from within a pod in the same namespace, will simulate an admission request:
+```
+$ curl -d @- -k https://bh-admission <<EOF
+{"kind":"AdmissionReview","apiVersion":"admission.k8s.io/v1beta1","request":{"uid":"b1b2eb30-5f71-4f39-831c-00395af68ccd","kind":{"group":"","version":"v1","kind":"Namespace"},"resource":{"group":"","version":"v1","resource":"namespaces"},"requestKind":{"group":"","version":"v1","kind":"Namespace"},"requestResource":{"group":"","version":"v1","resource":"namespaces"},"name":"junk8","operation":"CREATE","userInfo":{"username":"michael","groups":["system:cluster-admins","system:authenticated"],"extra":{"scopes.authorization.openshift.io":["user:full"]}},"object":{"kind":"Namespace","apiVersion":"v1","metadata":{"name":"junk8","creationTimestamp":null,"managedFields":[{"manager":"oc","operation":"Update","apiVersion":"v1","time":"2020-11-02T09:21:18Z","fieldsType":"FieldsV1","fieldsV1":{"f:status":{"f:phase":{}}}}]},"spec":{},"status":{"phase":"Active"}},"oldObject":null,"dryRun":false,"options":{"kind":"CreateOptions","apiVersion":"meta.k8s.io/v1"}},"response":{"uid":"","allowed":true,"patch":"W3sib3AiOiJhZGQiLCJwYXRoIjoiL21ldGFkYXRhL2Fubm90YXRpb25zIiwidmFsdWUiOnsiYm5ocC5jbG91ZGlhL2VudiI6ImJ1aWxkIiwiYm5ocC5jbG91ZGlhL293bmVyIjoibWljaGFlbCIsIm15Y29tcGFueS5jb20vcmVxdWVzdGVyIjoibWljaGFlbCJ9fV0=","patchType":"JSONPatch"}}
+EOF
+```

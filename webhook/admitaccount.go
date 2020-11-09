@@ -16,9 +16,24 @@ func admitAccount(review *v1beta1.AdmissionReview, externalAPIURL string, extern
 	request := review.Request
 	requestKind := request.Kind.Kind
 	requestName := request.Name
+	requester := request.UserInfo.Username
+	identifierType := "sa"
+	var err error
+	var patchBytes []byte
 
-	if len(requestName) == 0 {
-		// backwards compatibility for OCP 3
+	newAnnotations := map[string]string{
+		"bnhp.com/requester": requester,
+		"bnhp.cloudia/owner": requester,
+		"bnhp.cloudia/env":   "build",
+	}
+
+	if strings.EqualFold("ServiceAccount", requestKind) {
+		// ignore ServiceAccounts created automatically during project/namespace creation
+		if strings.EqualFold("system:serviceaccount:openshift-infra:serviceaccount-controller", request.UserInfo.Username) ||
+			strings.EqualFold("system:serviceaccount:kube-system:service-account-controller", request.UserInfo.Username) {
+			logrus.Debugln("Ignoring automatically generated service account:", requestName)
+			return nil
+		}
 		var sa corev1.ServiceAccount
 		if err := json.Unmarshal(request.Object.Raw, &sa); err != nil {
 			logrus.Errorln("Failed to unmarshal service account information:", err)
@@ -33,25 +48,12 @@ func admitAccount(review *v1beta1.AdmissionReview, externalAPIURL string, extern
 			accountRequestsError.Inc()
 			return nil
 		}
-		// logrus.Debugln("Unmarshalled Raw:", sa)
-		requestName = sa.GetName()
-		logrus.Debugln("Name set to:", requestName)
-	}
+		if len(requestName) == 0 {
+			// backwards compatibility for OCP 3
 
-	// Ensure that the request will succeed
-	review.Response = &v1beta1.AdmissionResponse{
-		Allowed: true,
-		Result: &metav1.Status{
-			Status: metav1.StatusSuccess,
-		},
-	}
-
-	if strings.EqualFold("ServiceAccount", requestKind) {
-		// ignore ServiceAccounts created automatically during project/namespace creation
-		if strings.EqualFold("system:serviceaccount:openshift-infra:serviceaccount-controller", request.UserInfo.Username) ||
-			strings.EqualFold("system:serviceaccount:kube-system:service-account-controller", request.UserInfo.Username) {
-			logrus.Debugln("Ignoring automatically generated service account:", requestName)
-			return nil
+			// logrus.Debugln("Unmarshalled Raw:", sa)
+			requestName = sa.GetName()
+			logrus.Debugln("Name set to:", requestName)
 		}
 		coreclient, err := corev1client.NewForConfig(&restConfig)
 		if err != nil {
@@ -65,6 +67,7 @@ func admitAccount(review *v1beta1.AdmissionReview, externalAPIURL string, extern
 			}).Info("Ignoring CREATE request for existing service account")
 			return nil
 		}
+		patchBytes, err = createPatch(sa.Annotations, newAnnotations)
 	} else {
 		// check for existing entry with the same name
 		if strings.EqualFold("User", requestKind) {
@@ -78,11 +81,42 @@ func admitAccount(review *v1beta1.AdmissionReview, externalAPIURL string, extern
 				return nil
 			}
 		}
+		identifierType = "user"
+
+		// temporarily unmarshal as service account to prevent the need for OpenShift includes
+		var sa corev1.ServiceAccount
+		if err := json.Unmarshal(request.Object.Raw, &sa); err != nil {
+			logrus.Errorln("Failed to unmarshal user information:", err)
+			review.Response = &v1beta1.AdmissionResponse{
+				Allowed: true,
+				Result: &metav1.Status{
+					Status:  metav1.StatusFailure,
+					Message: "Failed to unmarshal user information:" + err.Error(),
+				},
+			}
+			requestsError.Inc()
+			accountRequestsError.Inc()
+			return nil
+		}
+		// TODO - check whether annotations can be passed when creating user
+		patchBytes, err = createPatch(sa.Annotations, newAnnotations)
 	}
 
-	requestsHandled.Inc()
-	accountRequestsHandled.Inc()
-	err := prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, requestKind, request.Namespace, requestName, clusterName)
+	if err != nil {
+		review.Response = &v1beta1.AdmissionResponse{
+			Allowed: true,
+			Result: &metav1.Status{
+				Status:  metav1.StatusFailure,
+				Message: "createPatch failed: " + err.Error(),
+			},
+		}
+		requestsError.Inc()
+		namespaceRequestsError.Inc()
+		return nil
+	}
+
+	identifier := request.Namespace + "-" + requestName
+	err = prepareAndInvokeExternal(externalAPIURL, externalAPITimeout, identifierType, identifier, clusterName)
 	if err != nil {
 		review.Response = &v1beta1.AdmissionResponse{
 			Allowed: true,
@@ -93,6 +127,19 @@ func admitAccount(review *v1beta1.AdmissionReview, externalAPIURL string, extern
 		}
 		requestsError.Inc()
 		accountRequestsError.Inc()
+	}
+
+	requestsHandled.Inc()
+	accountRequestsHandled.Inc()
+
+	logrus.Debugln("AdmissionResponse:", string(patchBytes))
+	review.Response = &v1beta1.AdmissionResponse{
+		Allowed: true,
+		Patch:   patchBytes,
+		PatchType: func() *v1beta1.PatchType {
+			pt := v1beta1.PatchTypeJSONPatch
+			return &pt
+		}(),
 	}
 	return nil
 }
